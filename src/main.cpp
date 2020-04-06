@@ -1,4 +1,13 @@
-#include "../libberdip/platform.h"
+#if _MSC_VER
+#define NO_INTRINSICS 1
+#include <intrin.h>
+#endif
+
+#include "../libberdip/src/common.h"
+#include "../libberdip/src/maps.h"
+#include "../libberdip/src/maths.h"
+#include "../libberdip/src/strings.h"
+#include "../libberdip/src/files.h"
 
 global const char *gSpaces = "                                                                                                               ";
 
