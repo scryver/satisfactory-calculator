@@ -375,7 +375,8 @@ print_line(FileStream output, const char *fmt, ...)
 }
 
 internal void
-print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *endRecipe, f32 expectedPerMinute)
+print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *endRecipe, f32 expectedPerMinute,
+             b32 printAltenrates = false)
 {
     f32 ratio = expectedPerMinute / endRecipe->output.itemsPerMinute;
     
@@ -395,9 +396,9 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
         if (recipeCount)
         {
             Recipe *recipe = get_recipe(calculator, input->name);
-            print_recipe(calculator, output, cost, recipe, input->itemsPerMinute * ratio);
+            print_recipe(calculator, output, cost, recipe, input->itemsPerMinute * ratio, printAltenrates);
             
-            if (recipeCount > 1) {
+            if ((recipeCount > 1) && printAltenrates) {
                 print_line(output, "alternates:");
                 CostTest fakeCost = {};
                 ++output.indent;
@@ -405,7 +406,7 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
                 {
                     Recipe *recipe = get_recipe(calculator, input->name, skip);
                     i_expect(recipe);
-                    print_recipe(calculator, output, &fakeCost, recipe, input->itemsPerMinute * ratio);
+                    print_recipe(calculator, output, &fakeCost, recipe, input->itemsPerMinute * ratio, printAltenrates);
                 }
                 --output.indent;
             }
@@ -431,6 +432,8 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Smelter, static_string("iron ingot"), 30.0f, static_string("iron ore"), 30.0f);
     add_recipe(&calculator, Smelter, static_string("copper ingot"), 30.0f, static_string("copper ore"), 30.0f);
     add_recipe(&calculator, Foundry, static_string("steel ingot"), 45.0f, static_string("iron ore"), 45.0f, static_string("coal"), 45.0f);
+    add_recipe(&calculator, Foundry, static_string("steel ingot"), 60.0f, static_string("iron ingot"), 40.0f, static_string("coal"), 40.0f);
+    add_recipe(&calculator, Smelter, static_string("caterium ingot"), 15.0f, static_string("caterium ore"), 45.0f);
     
     add_recipe(&calculator, Constructor, static_string("concrete"), 15.0f, static_string("limestone"), 45.0f);
     add_recipe(&calculator, Constructor, static_string("iron plate"), 20.0f, static_string("iron ingot"), 30.0f);
@@ -443,6 +446,8 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Constructor, static_string("cable"), 30.0f, static_string("wire"), 60.0f);
     add_recipe(&calculator, Constructor, static_string("steel beam"), 15.0f, static_string("steel ingot"), 60.0f);
     add_recipe(&calculator, Constructor, static_string("steel pipe"), 20.0f, static_string("steel ingot"), 30.0f);
+    add_recipe(&calculator, Constructor, static_string("quickwire"), 60.0f, static_string("caterium ingot"), 12.0f);
+    add_recipe(&calculator, Constructor, static_string("quartz crystal"), 22.5f, static_string("raw crystal"), 37.5f);
     
     add_recipe(&calculator, Assembler, static_string("rotor"), 4.0f, static_string("iron rod"), 20.0f, static_string("screw"), 100.0f);
     add_recipe(&calculator, Assembler, static_string("stator"), 5.0f, static_string("steel pipe"), 15.0f, static_string("wire"), 40.0f);
@@ -451,6 +456,10 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Assembler, static_string("reinforced iron plate"), 5.0f, static_string("iron plate"), 30.0f, static_string("screw"), 60.0f);
     add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 6.0f, static_string("steel beam"), 24.0f, static_string("concrete"), 30.0f);
     add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 4.0f, static_string("steel pipe"), 28.0f, static_string("concrete"), 20.0f);
+    add_recipe(&calculator, Assembler, static_string("ai limiter"), 5.0f, static_string("copper sheet"), 25.0f, static_string("quickwire"), 100.0f);
+    
+    add_recipe(&calculator, Manufacturer, static_string("crystal oscillator"), 1.0f, static_string("quartz crystal"), 18.0f, static_string("cable"), 14.0f, static_string("reinforced iron plate"), 2.5f);
+    add_recipe(&calculator, Manufacturer, static_string("heavy modular frame"), 2.0f, static_string("modular frame"), 10.0f, static_string("steel pipe"), 30.0f, static_string("encased industrial beam"), 10.0f, static_string("screw"), 200.0f);
     
     add_recipe(&calculator, Assembler, static_string("compacted coal"), 25.0f, static_string("coal"), 25.0f, static_string("sulfur"), 25.0f);
     add_recipe(&calculator, Assembler, static_string("black powder"), 7.5f, static_string("coal"), 7.5f, static_string("sulfur"), 15.0f);
@@ -463,48 +472,85 @@ int main(int argc, char **argv)
     
     CostTest *cost = allocate_struct(CostTest);
     
-    if (argc == 2)
+    b32 printAlternates = false;
+    b32 printResources = false;
+    String recipeName = {};
+    f32 expectedAmount = 0.0f;
+    
+    u32 togo = argc - 1;
+    if (togo)
     {
-        Recipe *recipe = get_recipe(&calculator, string(argv[1]));
+        char **arguments = argv + 1;
+        while (togo)
+        {
+            if ((togo > 1) && (arguments[0][0] == '-')) {
+                if (arguments[0][1] == 'a') {
+                    printAlternates = true;
+                } else if (arguments[0][1] == 'r') {
+                    printResources = true;
+                }
+            } else if (recipeName.size == 0) {
+                recipeName = string(arguments[0]);
+            } else {
+                expectedAmount = float_from_string(string(arguments[0]));
+            }
+            --togo;
+            ++arguments;
+        }
+        
+        Recipe *recipe = get_recipe(&calculator, recipeName);
         if (recipe)
         {
+            if (expectedAmount == 0.0f) {
+                expectedAmount = recipe->output.itemsPerMinute;
+            }
             FileStream outputStream = {};
             outputStream.file.platform = stdout;
             outputStream.file.noErrors = 1;
             outputStream.file.filename = static_string("stdout");
             
-            print_recipe(&calculator, outputStream, cost, recipe, recipe->output.itemsPerMinute);
+            print_recipe(&calculator, outputStream, cost, recipe, expectedAmount, printAlternates);
             fprintf(stdout, "\n");
-            //print_cost(cost);
-            //fprintf(stdout, "\n");
+            if (printResources) {
+                print_cost(cost);
+                fprintf(stdout, "\n");
+            }
             output_input_cost(cost);
             print_cost(cost);
         }
         else
         {
-            fprintf(stderr, "Recipe '%s' not found!\n", argv[1]);
-        }
-    }
-    else if (argc == 3)
-    {
-        Recipe *recipe = get_recipe(&calculator, string(argv[1]));
-        if (recipe)
-        {
-            FileStream outputStream = {};
-            outputStream.file.platform = stdout;
-            outputStream.file.noErrors = 1;
-            outputStream.file.filename = static_string("stdout");
+            // NOTE(NAME): Very crude string comparator to help spelling mistakes
+            u32 bestMatchCount = 0;
+            String bestMatch = {};
             
-            print_recipe(&calculator, outputStream, cost, recipe, float_from_string(string(argv[2])));
-            fprintf(stdout, "\n");
-            //print_cost(cost);
-            //fprintf(stdout, "\n");
-            output_input_cost(cost);
-            print_cost(cost);
-        }
-        else
-        {
-            fprintf(stderr, "Recipe '%s' not found!\n", argv[1]);
+            for (u32 recipeIdx = 0; recipeIdx < calculator.recipeCount; ++recipeIdx)
+            {
+                Recipe *recipe = calculator.recipes + recipeIdx;
+                String testName = recipe->output.name;
+                u32 searchMult = 1;
+                u32 searchSum = 0;
+                u32 matchIdx = 0;
+                for (u32 idx = 0; (idx < testName.size) && (matchIdx < recipeName.size); ++idx)
+                {
+                    if (to_lower_case(recipeName.data[matchIdx]) == to_lower_case(testName.data[idx]))
+                    {
+                        searchSum += searchMult;
+                        searchMult *= 2;
+                        ++matchIdx;
+                    }
+                    else
+                    {
+                        searchMult = 1;
+                    }
+                }
+                if (bestMatchCount < searchSum)
+                {
+                    bestMatchCount = searchSum;
+                    bestMatch = testName;
+                }
+            }
+            fprintf(stderr, "Recipe '%.*s' not found! Did you mean '%.*s'?\n", STR_FMT(recipeName), STR_FMT(bestMatch));
         }
     }
     else
