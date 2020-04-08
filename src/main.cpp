@@ -185,6 +185,21 @@ add_recipe_cost(CostTest *cost, Recipe *recipe, f32 expectedPerMinute)
     f32 ratio = expectedPerMinute / recipe->output.itemsPerMinute;
     cost->buildingCounts[recipe->building] += ratio;
     
+    if (recipe->extraOutput.name.size)
+    {
+        Item *extra = get_produce_item(cost, recipe->extraOutput.name);
+        
+        if (!extra)
+        {
+            i_expect(cost->produceCount < array_count(cost->producedItems));
+            extra = cost->producedItems + cost->produceCount++;
+            extra->name = recipe->extraOutput.name;
+            extra->itemsPerMinute = 0;
+        }
+        extra->itemsPerMinute += recipe->extraOutput.itemsPerMinute * ratio;
+    }
+    
+    
     for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
     {
         Item *input = recipe->inputs + inputIdx;
@@ -469,6 +484,22 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Assembler, static_string("black powder"), 7.5f, static_string("coal"), 7.5f, static_string("sulfur"), 15.0f);
     add_recipe(&calculator, Assembler, static_string("black powder"), 15.0f, static_string("compacted coal"), 3.75f, static_string("sulfur"), 7.5f);
     add_recipe(&calculator, Assembler, static_string("nobelisk"), 3.0f, static_string("black powder"), 15.0f, static_string("steel pipe"), 30.0f);
+    
+    Recipe *plastic = add_recipe(&calculator, Refinery, static_string("plastic"), 20.0f, static_string("crude oil"), 30.0f);
+    plastic->extraOutput.name = add_item(&calculator, static_string("heavy oil residue"));
+    plastic->extraOutput.itemsPerMinute = 10.0f;
+    add_recipe(&calculator, Refinery, static_string("plastic"), 20.0f, static_string("polymer resin"), 60.0f, static_string("water"), 20.0f);
+    
+    add_recipe(&calculator, Refinery, static_string("rubber"), 60.0f, static_string("plastic"), 30.0f, static_string("fuel"), 30.0f);
+    Recipe *rubber = add_recipe(&calculator, Refinery, static_string("rubber"), 20.0f, static_string("crude oil"), 30.0f);
+    rubber->extraOutput.name = add_item(&calculator, static_string("heavy oil residue"));
+    rubber->extraOutput.itemsPerMinute = 20.0f;
+    add_recipe(&calculator, Refinery, static_string("rubber"), 20.0f, static_string("polymer resin"), 40.0f, static_string("water"), 40.0f);
+    
+    add_recipe(&calculator, Refinery, static_string("fuel"), 40.0f, static_string("heavy oil residue"), 60.0f);
+    Recipe *fuel = add_recipe(&calculator, Refinery, static_string("fuel"), 40.0f, static_string("crude oil"), 60.0f);
+    fuel->extraOutput.name = add_item(&calculator, static_string("polymer resin"));
+    fuel->extraOutput.itemsPerMinute = 30.0f;
     
     add_recipe(&calculator, Assembler, static_string("automated wiring"), 2.5f, static_string("stator"), 2.5f, static_string("cable"), 50.0f);
     add_recipe(&calculator, Assembler, static_string("smart plating"), 2.0f, static_string("reinforced iron plate"), 2.0f, static_string("rotor"), 2.0f);
