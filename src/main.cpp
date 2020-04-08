@@ -457,9 +457,13 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 6.0f, static_string("steel beam"), 24.0f, static_string("concrete"), 30.0f);
     add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 4.0f, static_string("steel pipe"), 28.0f, static_string("concrete"), 20.0f);
     add_recipe(&calculator, Assembler, static_string("ai limiter"), 5.0f, static_string("copper sheet"), 25.0f, static_string("quickwire"), 100.0f);
+    add_recipe(&calculator, Assembler, static_string("circuit board"), 7.5f, static_string("copper sheet"), 15.0f, static_string("plastic"), 30.0f);
     
+    add_recipe(&calculator, Manufacturer, static_string("beacon"), 7.5f, static_string("iron plate"), 22.5f, static_string("iron rod"), 7.5f, static_string("wire"), 112.5f, static_string("cable"), 15.0f);
     add_recipe(&calculator, Manufacturer, static_string("crystal oscillator"), 1.0f, static_string("quartz crystal"), 18.0f, static_string("cable"), 14.0f, static_string("reinforced iron plate"), 2.5f);
     add_recipe(&calculator, Manufacturer, static_string("heavy modular frame"), 2.0f, static_string("modular frame"), 10.0f, static_string("steel pipe"), 30.0f, static_string("encased industrial beam"), 10.0f, static_string("screw"), 200.0f);
+    add_recipe(&calculator, Manufacturer, static_string("computer"), 2.5f, static_string("circuit board"), 25.0f, static_string("cable"), 22.5f, static_string("plastic"), 45.0f, static_string("screw"), 130.0f);
+    add_recipe(&calculator, Manufacturer, static_string("high-speed connector"), 3.8f, static_string("quickwire"), 210.0f, static_string("cable"), 37.5f, static_string("circuit board"), 3.75f);
     
     add_recipe(&calculator, Assembler, static_string("compacted coal"), 25.0f, static_string("coal"), 25.0f, static_string("sulfur"), 25.0f);
     add_recipe(&calculator, Assembler, static_string("black powder"), 7.5f, static_string("coal"), 7.5f, static_string("sulfur"), 15.0f);
@@ -469,6 +473,8 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Assembler, static_string("automated wiring"), 2.5f, static_string("stator"), 2.5f, static_string("cable"), 50.0f);
     add_recipe(&calculator, Assembler, static_string("smart plating"), 2.0f, static_string("reinforced iron plate"), 2.0f, static_string("rotor"), 2.0f);
     add_recipe(&calculator, Assembler, static_string("versatile framework"), 5.0f, static_string("modular frame"), 2.5f, static_string("steel beam"), 30.0f);
+    add_recipe(&calculator, Manufacturer, static_string("modular engine"), 1.0f, static_string("motor"), 2.0f, static_string("rubber"), 15.0f, static_string("smart plating"), 2.0f);
+    add_recipe(&calculator, Manufacturer, static_string("adaptive control unit"), 1.0f, static_string("automated wiring"), 7.5f, static_string("circuit board"), 5.0f, static_string("heavy modular frame"), 1.0f, static_string("computer"), 1.0f);
     
     CostTest *cost = allocate_struct(CostTest);
     
