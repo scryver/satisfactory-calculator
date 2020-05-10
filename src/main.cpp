@@ -34,6 +34,19 @@ enum Building
     BuildingCount
 };
 
+global f32 gPowerForBuilding[BuildingCount] =
+{
+    0.0f,
+    12.0f, // NOTE(NAME): Miner Mk2 only
+    40.0f, // OilExtractor
+    4.0f,  // Smelter
+    16.0f, // Foundry
+    4.0f,  // Constructor
+    15.0f, // Assembler
+    55.0f, // Manufacturer
+    30.0f, // Refinery
+};
+
 struct Recipe
 {
     Building building;
@@ -266,15 +279,20 @@ print_cost(CostTest *cost)
     }
     
     fprintf(stdout, "Buildings:\n");
+    i_expect(array_count(cost->buildingCounts) <= BuildingCount);
+    f32 totalPower = 0.0f;
     for (u32 idx = 1; idx < array_count(cost->buildingCounts); ++idx)
     {
         f32 value = cost->buildingCounts[idx];
         if (value != 0.0f)
         {
             String name = string_from_building((Building)idx, value == 1.0f);
-            fprintf(stdout, "  %.*s : %5.2fx\n", STR_FMT(name), value);
+            f32 powerUsage = value * gPowerForBuilding[idx];
+            fprintf(stdout, "  %.*s : %5.2fx, %5.1f MW\n", STR_FMT(name), value, powerUsage);
+            totalPower += powerUsage;
         }
     }
+    fprintf(stdout, "Total power usage: %5.1fMW\n", totalPower);
 }
 
 internal String
@@ -659,7 +677,9 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Constructor, static_string("steel beam"), 15.0f, static_string("steel ingot"), 60.0f);
     add_recipe(&calculator, Constructor, static_string("steel pipe"), 20.0f, static_string("steel ingot"), 30.0f);
     add_recipe(&calculator, Constructor, static_string("quickwire"), 60.0f, static_string("caterium ingot"), 12.0f);
-    add_recipe(&calculator, Constructor, static_string("quartz crystal"), 22.5f, static_string("raw crystal"), 37.5f);
+    add_recipe(&calculator, Constructor, static_string("quartz crystal"), 22.5f, static_string("raw quartz"), 37.5f);
+    add_recipe(&calculator, Constructor, static_string("silica"), 37.5f, static_string("raw quartz"), 22.5f);
+    add_recipe(&calculator, Constructor, static_string("empty canister"), 60.0f, static_string("plastic"), 30.0f);
     
     add_recipe(&calculator, Assembler, static_string("rotor"), 4.0f, static_string("iron rod"), 20.0f, static_string("screw"), 100.0f);
     add_recipe(&calculator, Assembler, static_string("stator"), 5.0f, static_string("steel pipe"), 15.0f, static_string("wire"), 40.0f);
@@ -670,17 +690,21 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 4.0f, static_string("steel pipe"), 28.0f, static_string("concrete"), 20.0f);
     add_recipe(&calculator, Assembler, static_string("ai limiter"), 5.0f, static_string("copper sheet"), 25.0f, static_string("quickwire"), 100.0f);
     add_recipe(&calculator, Assembler, static_string("circuit board"), 7.5f, static_string("copper sheet"), 15.0f, static_string("plastic"), 30.0f);
+    add_recipe(&calculator, Assembler, static_string("fabric"), 15.0f, static_string("mycelia"), 15.0f, static_string("biomass"), 75.0f);
     
     add_recipe(&calculator, Manufacturer, static_string("beacon"), 7.5f, static_string("iron plate"), 22.5f, static_string("iron rod"), 7.5f, static_string("wire"), 112.5f, static_string("cable"), 15.0f);
     add_recipe(&calculator, Manufacturer, static_string("crystal oscillator"), 1.0f, static_string("quartz crystal"), 18.0f, static_string("cable"), 14.0f, static_string("reinforced iron plate"), 2.5f);
     add_recipe(&calculator, Manufacturer, static_string("heavy modular frame"), 2.0f, static_string("modular frame"), 10.0f, static_string("steel pipe"), 30.0f, static_string("encased industrial beam"), 10.0f, static_string("screw"), 200.0f);
     add_recipe(&calculator, Manufacturer, static_string("computer"), 2.5f, static_string("circuit board"), 25.0f, static_string("cable"), 22.5f, static_string("plastic"), 45.0f, static_string("screw"), 130.0f);
     add_recipe(&calculator, Manufacturer, static_string("high-speed connector"), 3.8f, static_string("quickwire"), 210.0f, static_string("cable"), 37.5f, static_string("circuit board"), 3.75f);
+    add_recipe(&calculator, Manufacturer, static_string("supercomputer"), 1.875f, static_string("computer"), 3.75f, static_string("ai limiter"), 3.75f, static_string("high-speed connector"), 5.625f, static_string("plastic"), 52.5f);
     
     add_recipe(&calculator, Assembler, static_string("compacted coal"), 25.0f, static_string("coal"), 25.0f, static_string("sulfur"), 25.0f);
     add_recipe(&calculator, Assembler, static_string("black powder"), 7.5f, static_string("coal"), 7.5f, static_string("sulfur"), 15.0f);
     add_recipe(&calculator, Assembler, static_string("black powder"), 15.0f, static_string("compacted coal"), 3.75f, static_string("sulfur"), 7.5f);
     add_recipe(&calculator, Assembler, static_string("nobelisk"), 3.0f, static_string("black powder"), 15.0f, static_string("steel pipe"), 30.0f);
+    add_recipe(&calculator, Manufacturer, static_string("gas filter"), 7.5f, static_string("coal"), 5.0f, static_string("rubber"), 15.0f, static_string("fabric"), 15.0f);
+    add_recipe(&calculator, Manufacturer, static_string("rifle cartridge"), 15.0f, static_string("beacon"), 3.0f, static_string("steel pipe"), 30.0f, static_string("black powder"), 30.0f, static_string("rubber"), 30.0f);
     
     Recipe *plastic = add_recipe(&calculator, Refinery, static_string("plastic"), 20.0f, static_string("crude oil"), 30.0f);
     plastic->extraOutput.name = add_item(&calculator, static_string("heavy oil residue"));
@@ -772,7 +796,6 @@ int main(int argc, char **argv)
                 output_input_cost(cost);
                 print_cost(cost);
             }
-            
         }
         else
         {
