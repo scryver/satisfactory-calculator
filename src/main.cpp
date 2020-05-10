@@ -1,6 +1,8 @@
 #if _MSC_VER
 #define NO_INTRINSICS 1
 #include <intrin.h>
+#else
+#include <x86intrin.h>
 #endif
 
 #include "../libberdip/src/common.h"
@@ -169,7 +171,7 @@ get_produce_item(CostTest *cost, String name)
 }
 
 internal void
-add_recipe_cost(CostTest *cost, Recipe *recipe, f32 expectedPerMinute)
+add_recipe_cost(CostTest *cost, Recipe *recipe, f32 ratio)
 {
     Item *produced = get_produce_item(cost, recipe->output.name);
     
@@ -180,9 +182,7 @@ add_recipe_cost(CostTest *cost, Recipe *recipe, f32 expectedPerMinute)
         produced->name = recipe->output.name;
         produced->itemsPerMinute = 0;
     }
-    produced->itemsPerMinute += expectedPerMinute;
-    
-    f32 ratio = expectedPerMinute / recipe->output.itemsPerMinute;
+    produced->itemsPerMinute += ratio * recipe->output.itemsPerMinute;
     cost->buildingCounts[recipe->building] += ratio;
     
     if (recipe->extraOutput.name.size)
@@ -198,7 +198,6 @@ add_recipe_cost(CostTest *cost, Recipe *recipe, f32 expectedPerMinute)
         }
         extra->itemsPerMinute += recipe->extraOutput.itemsPerMinute * ratio;
     }
-    
     
     for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
     {
@@ -390,15 +389,87 @@ print_line(FileStream output, const char *fmt, ...)
 }
 
 internal void
+calc_total_production(Calculator *calculator, CostTest *cost, Recipe *recipe, f32 expectedPerMinute)
+{
+    f32 ratio = expectedPerMinute / recipe->output.itemsPerMinute;
+    add_recipe_cost(cost, recipe, ratio);
+    
+    for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
+    {
+        Item *input = recipe->inputs + inputIdx;
+        
+        u32 recipeCount = get_recipe_count(calculator, input->name);
+        if (recipeCount)
+        {
+            Recipe *inputRecipe = get_recipe(calculator, input->name);
+            calc_total_production(calculator, cost, inputRecipe, ratio * input->itemsPerMinute);
+        }
+    }
+}
+
+internal void
+print_total_production(Calculator *calculator, FileStream output, CostTest *cost)
+{
+    for (u32 productionIdx = 0; productionIdx < cost->produceCount; ++productionIdx)
+    {
+        Item *produce = cost->producedItems + productionIdx;
+        Item *consumed = get_consume_item(cost, produce->name);
+        
+        Recipe *productionRecipe = get_recipe(calculator, produce->name);
+        i_expect(productionRecipe);
+        
+        if (consumed)
+        {
+            print_line(output, "Intermediate %.*s: %5.2f per minute (%3.1fx)", STR_FMT(produce->name), produce->itemsPerMinute, produce->itemsPerMinute / productionRecipe->output.itemsPerMinute);
+            if (consumed->itemsPerMinute < produce->itemsPerMinute)
+            {
+                f32 extras = produce->itemsPerMinute - consumed->itemsPerMinute;
+                ++output.indent;
+                print_line(output, "Extras: %5.2f per minute", extras);
+                --output.indent;
+            }
+        }
+        else
+        {
+            print_line(output, "Producing %.*s: %5.2f per minute (%3.1fx)", STR_FMT(produce->name), produce->itemsPerMinute,
+                       produce->itemsPerMinute / productionRecipe->output.itemsPerMinute);
+        }
+    }
+    
+    for (u32 consumptionIdx = 0; consumptionIdx < cost->consumeCount; ++consumptionIdx)
+    {
+        Item *consumed = cost->consumedItems + consumptionIdx;
+        Item *produce = get_produce_item(cost, consumed->name);
+        
+        if (!produce)
+        {
+            print_line(output, "Consuming %.*s: %5.2f per minute", STR_FMT(consumed->name), consumed->itemsPerMinute);
+        }
+    }
+}
+
+internal void
 print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *endRecipe, f32 expectedPerMinute,
-             b32 printAltenrates = false)
+             b32 printAltenrates = false, b32 printOverproduce = false)
 {
     f32 ratio = expectedPerMinute / endRecipe->output.itemsPerMinute;
     
     //fprintf(stdout, "=====================================================\n");
-    
     print_line(output, "%.*s: %5.2f per minute (%3.1fx)", STR_FMT(endRecipe->output.name), expectedPerMinute, ratio);
-    add_recipe_cost(cost, endRecipe, expectedPerMinute);
+    
+    if (printOverproduce)
+    {
+        //print_line(output, "%5.2f => %5.2f (%5.2f)\n", ratio, ceil(ratio), test);
+        f32 newRatio = ceil(ratio);
+        
+        if (newRatio != ratio)
+        {
+            f32 newProduced = newRatio * endRecipe->output.itemsPerMinute;
+            print_line(output, "%.*s: OVERPRODUCING: From %5.2f to %5.2f per minute (%3.1fx)", STR_FMT(endRecipe->output.name), expectedPerMinute, newProduced, newRatio);
+            ratio = newRatio;
+        }
+    }
+    add_recipe_cost(cost, endRecipe, ratio);
     
     //++output.indent;
     //print_line(output, "input%s:", (endRecipe->inputCount > 1) ? "s" : "");
@@ -411,19 +482,75 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
         if (recipeCount)
         {
             Recipe *recipe = get_recipe(calculator, input->name);
-            print_recipe(calculator, output, cost, recipe, input->itemsPerMinute * ratio, printAltenrates);
             
-            if ((recipeCount > 1) && printAltenrates) {
-                print_line(output, "alternates:");
-                CostTest fakeCost = {};
-                ++output.indent;
-                for (u32 skip = 1; skip < recipeCount; ++skip)
+            f32 expectedInput = input->itemsPerMinute * ratio;
+            if (printOverproduce)
+            {
+                Item *producedAlready = get_produce_item(cost, input->name);
+                Item *consumedAlready = get_consume_item(cost, input->name);
+                
+                f32 consumedItems = 0.0f;
+                if (consumedAlready)
                 {
-                    Recipe *recipe = get_recipe(calculator, input->name, skip);
-                    i_expect(recipe);
-                    print_recipe(calculator, output, &fakeCost, recipe, input->itemsPerMinute * ratio, printAltenrates);
+                    consumedItems = consumedAlready->itemsPerMinute;
                 }
-                --output.indent;
+                
+                f32 extraPerMinute = 0.0f;
+                if (producedAlready)
+                {
+                    // NOTE(NAME): Double count the expectedInput, because of the way add_recipe_cost works
+                    i_expect(consumedItems >= producedAlready->itemsPerMinute);
+                    extraPerMinute = expectedInput + producedAlready->itemsPerMinute - consumedItems;
+                }
+                
+                if (extraPerMinute >= expectedInput)
+                {
+                    if (!consumedAlready)
+                    {
+                        i_expect(cost->consumeCount < array_count(cost->consumedItems));
+                        consumedAlready = cost->consumedItems + cost->consumeCount++;
+                        consumedAlready->name = input->name;
+                        consumedAlready->itemsPerMinute = 0;
+                    }
+                    
+                    consumedAlready->itemsPerMinute += expectedInput;
+                    expectedInput = 0;
+                }
+                else if (extraPerMinute > 0.0f)
+                {
+                    if (!consumedAlready)
+                    {
+                        i_expect(cost->consumeCount < array_count(cost->consumedItems));
+                        consumedAlready = cost->consumedItems + cost->consumeCount++;
+                        consumedAlready->name = input->name;
+                        consumedAlready->itemsPerMinute = 0;
+                    }
+                    print_line(output, "%.*s: USING EXTRA %5.2f per minute", STR_FMT(input->name), extraPerMinute);
+                    consumedAlready->itemsPerMinute += extraPerMinute;
+                    expectedInput = expectedInput - extraPerMinute;
+                }
+            }
+            
+            if (expectedInput > 0.0f)
+            {
+                print_recipe(calculator, output, cost, recipe, expectedInput, printAltenrates, printOverproduce);
+                
+                if ((recipeCount > 1) && printAltenrates) {
+                    print_line(output, "alternates:");
+                    CostTest fakeCost = {};
+                    ++output.indent;
+                    for (u32 skip = 1; skip < recipeCount; ++skip)
+                    {
+                        Recipe *recipe = get_recipe(calculator, input->name, skip);
+                        i_expect(recipe);
+                        print_recipe(calculator, output, &fakeCost, recipe, input->itemsPerMinute * ratio, printAltenrates, printOverproduce);
+                    }
+                    --output.indent;
+                }
+            }
+            else
+            {
+                print_line(output, "%.*s: already produced previously", STR_FMT(input->name));
             }
         }
         else
@@ -434,6 +561,76 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
     --output.indent;
     
     //fprintf(stdout, "=====================================================\n");
+}
+
+internal String
+print_dot_recipe(Calculator *calculator, FileStream output, Recipe *recipe, f32 expectedPerMinute,
+                 u32 maxNameCount, u8 *nameData, u32 *index)
+{
+    u8 tempBuffer[256];
+    u8 recordBuffer[1024];
+    
+    f32 ratio = expectedPerMinute / recipe->output.itemsPerMinute;
+    
+    String result = {0, nameData};
+    String snakeName = to_snake(recipe->output.name, array_count(tempBuffer), tempBuffer);
+    result = string_fmt(maxNameCount, nameData, "%.*s%d", STR_FMT(snakeName), (*index)++);
+    
+    String record = string_fmt(array_count(recordBuffer), recordBuffer, "%.*s [shape=record, label=\"{", STR_FMT(result));
+    for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
+    {
+        Item *input = recipe->inputs + inputIdx;
+        snakeName = to_snake(input->name, array_count(tempBuffer), tempBuffer);
+        record = append_string_fmt(record, array_count(recordBuffer), "%s<%.*s>%.*s", inputIdx == 0 ? "{" : "|", STR_FMT(snakeName), STR_FMT(input->name));
+    }
+    snakeName = to_snake(recipe->output.name, array_count(tempBuffer), tempBuffer); // TODO(michiel): I know...
+    record = append_string_fmt(record, array_count(recordBuffer), "}|%3.1f|{<%.*s>%.*s", STR_FMT(snakeName), ratio, STR_FMT(recipe->output.name));
+    if (recipe->extraOutput.name.size)
+    {
+        snakeName = to_snake(recipe->extraOutput.name, array_count(tempBuffer), tempBuffer);
+        record = append_string_fmt(record, array_count(recordBuffer), "|<%.*s>%.*s", STR_FMT(snakeName), STR_FMT(recipe->extraOutput.name));
+    }
+    record = append_string(record, string("}}\"];"), array_count(recordBuffer));
+    
+    print_line(output, "%.*s", STR_FMT(record));
+    
+    
+    u8 inputBuffer[256];
+    for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
+    {
+        Item *input = recipe->inputs + inputIdx;
+        u32 recipeCount = get_recipe_count(calculator, input->name);
+        if (recipeCount)
+        {
+            Recipe *inputRecipe = get_recipe(calculator, input->name);
+            i_expect(inputRecipe);
+            
+            f32 expectedInput = input->itemsPerMinute * ratio;
+            String inputString = print_dot_recipe(calculator, output, inputRecipe, expectedInput, array_count(inputBuffer), inputBuffer, index);
+            
+            snakeName = to_snake(input->name, array_count(tempBuffer), tempBuffer);
+            print_line(output, "%.*s:%.*s -> %.*s:%.*s", STR_FMT(inputString), STR_FMT(snakeName), STR_FMT(result), STR_FMT(snakeName));
+        }
+    }
+    
+    return result;
+}
+
+internal void
+print_dotfile(Calculator *calculator, FileStream output, Recipe *recipe, f32 expectedPerMinute)
+{
+    u8 tempBuffer[256];
+    String camelName = to_camel(recipe->output.name, array_count(tempBuffer), tempBuffer);
+    print_line(output, "digraph %.*s {", STR_FMT(camelName));
+    ++output.indent;
+    print_line(output, "rankdir=LR;");
+    print_line(output, "ranksep=\"1\";\n");
+    
+    u32 index = 0;
+    print_dot_recipe(calculator, output, recipe, expectedPerMinute, array_count(tempBuffer), tempBuffer, &index);
+    
+    --output.indent;
+    print_line(output, "}");
 }
 
 int main(int argc, char **argv)
@@ -511,6 +708,9 @@ int main(int argc, char **argv)
     
     b32 printAlternates = false;
     b32 printResources = false;
+    b32 printOverproduce = false;
+    b32 printTotal = false;
+    b32 printDot = false;
     String recipeName = {};
     f32 expectedAmount = 0.0f;
     
@@ -525,6 +725,12 @@ int main(int argc, char **argv)
                     printAlternates = true;
                 } else if (arguments[0][1] == 'r') {
                     printResources = true;
+                } else if (arguments[0][1] == 'o') {
+                    printOverproduce = true;
+                } else if (arguments[0][1] == 't') {
+                    printTotal = true;
+                } else if (arguments[0][1] == 'd') {
+                    printDot = true;
                 }
             } else if (recipeName.size == 0) {
                 recipeName = string(arguments[0]);
@@ -546,14 +752,27 @@ int main(int argc, char **argv)
             outputStream.file.noErrors = 1;
             outputStream.file.filename = static_string("stdout");
             
-            print_recipe(&calculator, outputStream, cost, recipe, expectedAmount, printAlternates);
-            fprintf(stdout, "\n");
-            if (printResources) {
-                print_cost(cost);
-                fprintf(stdout, "\n");
+            if (printDot)
+            {
+                print_dotfile(&calculator, outputStream, recipe, expectedAmount);
             }
-            output_input_cost(cost);
-            print_cost(cost);
+            else if (printTotal)
+            {
+                calc_total_production(&calculator, cost, recipe, expectedAmount);
+                print_total_production(&calculator, outputStream, cost);
+            }
+            else
+            {
+                print_recipe(&calculator, outputStream, cost, recipe, expectedAmount, printAlternates, printOverproduce);
+                fprintf(stdout, "\n");
+                if (printResources) {
+                    print_cost(cost);
+                    fprintf(stdout, "\n");
+                }
+                output_input_cost(cost);
+                print_cost(cost);
+            }
+            
         }
         else
         {
