@@ -7,6 +7,6 @@ mkdir -p gebouw
 
 cd gebouw > /dev/null
 
-echo Building statisfactory calc
+echo Building satisfactory calc
 clang++ $opts $code/src/main.cpp -o satisfactory-calc
 cd $code > /dev/null

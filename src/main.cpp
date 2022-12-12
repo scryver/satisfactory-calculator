@@ -30,7 +30,9 @@ enum Building
     Assembler,
     Manufacturer,
     Refinery,
-    
+    Packager,
+    Blender,
+
     BuildingCount
 };
 
@@ -60,7 +62,7 @@ struct Recipe
 struct Calculator
 {
     Interns strings;
-    
+
     u32 maxRecipeCount;
     u32 recipeCount;
     Recipe *recipes;
@@ -88,7 +90,7 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("miners");
             }
         } break;
-        
+
         case OilExtractor: {
             if (single) {
                 result = static_string("oil extractor");
@@ -96,7 +98,7 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("oil extractors");
             }
         } break;
-        
+
         case Smelter: {
             if (single) {
                 result = static_string("smelter");
@@ -104,7 +106,7 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("smelters");
             }
         } break;
-        
+
         case Foundry: {
             if (single) {
                 result = static_string("foundry");
@@ -112,7 +114,7 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("foundries");
             }
         } break;
-        
+
         case Constructor: {
             if (single) {
                 result = static_string("constructor");
@@ -120,7 +122,7 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("constructors");
             }
         } break;
-        
+
         case Assembler: {
             if (single) {
                 result = static_string("assembler");
@@ -128,7 +130,7 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("assemblers");
             }
         } break;
-        
+
         case Manufacturer: {
             if (single) {
                 result = static_string("manufacturer");
@@ -136,7 +138,7 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("manufacturers");
             };
         } break;
-        
+
         case Refinery: {
             if (single) {
                 result = static_string("refinery");
@@ -144,10 +146,26 @@ string_from_building(Building building, b32 single = true)
                 result = static_string("refineries");
             }
         } break;
-        
+
+        case Packager: {
+            if (single) {
+                result = static_string("packager");
+            } else {
+                result = static_string("packagers");
+            }
+        } break;
+
+        case Blender: {
+            if (single) {
+                result = static_string("blender");
+            } else {
+                result = static_string("blenders");
+            }
+        } break;
+
         INVALID_DEFAULT_CASE;
     };
-    
+
     return result;
 }
 
@@ -187,7 +205,7 @@ internal void
 add_recipe_cost(CostTest *cost, Recipe *recipe, f32 ratio)
 {
     Item *produced = get_produce_item(cost, recipe->output.name);
-    
+
     if (!produced)
     {
         i_expect(cost->produceCount < array_count(cost->producedItems));
@@ -197,11 +215,11 @@ add_recipe_cost(CostTest *cost, Recipe *recipe, f32 ratio)
     }
     produced->itemsPerMinute += ratio * recipe->output.itemsPerMinute;
     cost->buildingCounts[recipe->building] += ratio;
-    
+
     if (recipe->extraOutput.name.size)
     {
         Item *extra = get_produce_item(cost, recipe->extraOutput.name);
-        
+
         if (!extra)
         {
             i_expect(cost->produceCount < array_count(cost->producedItems));
@@ -211,12 +229,12 @@ add_recipe_cost(CostTest *cost, Recipe *recipe, f32 ratio)
         }
         extra->itemsPerMinute += recipe->extraOutput.itemsPerMinute * ratio;
     }
-    
+
     for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
     {
         Item *input = recipe->inputs + inputIdx;
         Item *consumed = get_consume_item(cost, input->name);
-        
+
         if (!consumed)
         {
             i_expect(cost->consumeCount < array_count(cost->consumedItems));
@@ -270,14 +288,14 @@ print_cost(CostTest *cost)
         Item *item = cost->consumedItems + consumeIdx;
         fprintf(stdout, "  %.*s : %5.2f / minute\n", STR_FMT(item->name), item->itemsPerMinute);
     }
-    
+
     fprintf(stdout, "Produced:\n");
     for (u32 produceIdx = 0; produceIdx < cost->produceCount; ++produceIdx)
     {
         Item *item = cost->producedItems + produceIdx;
         fprintf(stdout, "  %.*s : %5.2f / minute\n", STR_FMT(item->name), item->itemsPerMinute);
     }
-    
+
     fprintf(stdout, "Buildings:\n");
     i_expect(array_count(cost->buildingCounts) <= BuildingCount);
     f32 totalPower = 0.0f;
@@ -302,19 +320,26 @@ add_item(Calculator *calculator, String name)
     return result;
 }
 
+internal void
+add_extra_item(Calculator *calculator, Recipe *recipe, String name, f32 itemsPerMinute)
+{
+    recipe->extraOutput.name = add_item(calculator, name);
+    recipe->extraOutput.itemsPerMinute = itemsPerMinute;
+}
+
 internal Recipe *
 add_recipe(Calculator *calculator, Building building, String outputName, f32 outputPerMinute, String inputName, f32 inputPerMinute)
 {
     i_expect(calculator->recipeCount < calculator->maxRecipeCount);
     Recipe *result = calculator->recipes + calculator->recipeCount++;
-    
+
     result->building = building;
     result->inputCount = 1;
     result->inputs[0].name = add_item(calculator, inputName);
     result->inputs[0].itemsPerMinute = inputPerMinute;
     result->output.name = add_item(calculator, outputName);
     result->output.itemsPerMinute = outputPerMinute;
-    
+
     return result;
 }
 
@@ -322,11 +347,11 @@ internal Recipe *
 add_recipe(Calculator *calculator, Building building, String outputName, f32 outputPerMinute, String inputName1, f32 inputPerMinute1, String inputName2, f32 inputPerMinute2)
 {
     Recipe *result = add_recipe(calculator, building, outputName, outputPerMinute, inputName1, inputPerMinute1);
-    
+
     result->inputCount = 2;
     result->inputs[1].name = add_item(calculator, inputName2);
     result->inputs[1].itemsPerMinute = inputPerMinute2;
-    
+
     return result;
 }
 
@@ -334,11 +359,11 @@ internal Recipe *
 add_recipe(Calculator *calculator, Building building, String outputName, f32 outputPerMinute, String inputName1, f32 inputPerMinute1, String inputName2, f32 inputPerMinute2, String inputName3, f32 inputPerMinute3)
 {
     Recipe *result = add_recipe(calculator, building, outputName, outputPerMinute, inputName1, inputPerMinute1, inputName2, inputPerMinute2);
-    
+
     result->inputCount = 3;
     result->inputs[2].name = add_item(calculator, inputName3);
     result->inputs[2].itemsPerMinute = inputPerMinute3;
-    
+
     return result;
 }
 
@@ -346,11 +371,11 @@ internal Recipe *
 add_recipe(Calculator *calculator, Building building, String outputName, f32 outputPerMinute, String inputName1, f32 inputPerMinute1, String inputName2, f32 inputPerMinute2, String inputName3, f32 inputPerMinute3, String inputName4, f32 inputPerMinute4)
 {
     Recipe *result = add_recipe(calculator, building, outputName, outputPerMinute, inputName1, inputPerMinute1, inputName2, inputPerMinute2, inputName3, inputPerMinute3);
-    
+
     result->inputCount = 4;
     result->inputs[3].name = add_item(calculator, inputName4);
     result->inputs[3].itemsPerMinute = inputPerMinute4;
-    
+
     return result;
 }
 
@@ -367,7 +392,7 @@ get_recipe_count(Calculator *calculator, String name)
             ++result;
         }
     }
-    
+
     return result;
 }
 
@@ -389,7 +414,7 @@ get_recipe(Calculator *calculator, String name, u32 skip = 0)
             }
         }
     }
-    
+
     return result;
 }
 
@@ -397,12 +422,12 @@ internal void
 print_line(FileStream output, const char *fmt, ...)
 {
     fprintf(stream2stdfile(output), "%.*s", output.indent * 2, gSpaces);
-    
+
     va_list args;
     va_start(args, fmt);
     vfprintf(stream2stdfile(output), fmt, args);
     va_end(args);
-    
+
     fprintf(stream2stdfile(output), "\n");
 }
 
@@ -411,11 +436,11 @@ calc_total_production(Calculator *calculator, CostTest *cost, Recipe *recipe, f3
 {
     f32 ratio = expectedPerMinute / recipe->output.itemsPerMinute;
     add_recipe_cost(cost, recipe, ratio);
-    
+
     for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
     {
         Item *input = recipe->inputs + inputIdx;
-        
+
         u32 recipeCount = get_recipe_count(calculator, input->name);
         if (recipeCount)
         {
@@ -432,10 +457,10 @@ print_total_production(Calculator *calculator, FileStream output, CostTest *cost
     {
         Item *produce = cost->producedItems + productionIdx;
         Item *consumed = get_consume_item(cost, produce->name);
-        
+
         Recipe *productionRecipe = get_recipe(calculator, produce->name);
         i_expect(productionRecipe);
-        
+
         if (consumed)
         {
             print_line(output, "Intermediate %.*s: %5.2f per minute (%3.1fx)", STR_FMT(produce->name), produce->itemsPerMinute, produce->itemsPerMinute / productionRecipe->output.itemsPerMinute);
@@ -453,12 +478,12 @@ print_total_production(Calculator *calculator, FileStream output, CostTest *cost
                        produce->itemsPerMinute / productionRecipe->output.itemsPerMinute);
         }
     }
-    
+
     for (u32 consumptionIdx = 0; consumptionIdx < cost->consumeCount; ++consumptionIdx)
     {
         Item *consumed = cost->consumedItems + consumptionIdx;
         Item *produce = get_produce_item(cost, consumed->name);
-        
+
         if (!produce)
         {
             print_line(output, "Consuming %.*s: %5.2f per minute", STR_FMT(consumed->name), consumed->itemsPerMinute);
@@ -468,18 +493,18 @@ print_total_production(Calculator *calculator, FileStream output, CostTest *cost
 
 internal void
 print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *endRecipe, f32 expectedPerMinute,
-             b32 printAltenrates = false, b32 printOverproduce = false)
+             b32 printAlternates = false, b32 printOverproduce = false)
 {
     f32 ratio = expectedPerMinute / endRecipe->output.itemsPerMinute;
-    
+
     //fprintf(stdout, "=====================================================\n");
     print_line(output, "%.*s: %5.2f per minute (%3.1fx)", STR_FMT(endRecipe->output.name), expectedPerMinute, ratio);
-    
+
     if (printOverproduce)
     {
         //print_line(output, "%5.2f => %5.2f (%5.2f)\n", ratio, ceil(ratio), test);
         f32 newRatio = ceil(ratio);
-        
+
         if (newRatio != ratio)
         {
             f32 newProduced = newRatio * endRecipe->output.itemsPerMinute;
@@ -488,10 +513,10 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
         }
     }
     add_recipe_cost(cost, endRecipe, ratio);
-    
+
     //++output.indent;
     //print_line(output, "input%s:", (endRecipe->inputCount > 1) ? "s" : "");
-    
+
     ++output.indent;
     for (u32 inputIdx = 0; inputIdx < endRecipe->inputCount; ++inputIdx)
     {
@@ -500,19 +525,19 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
         if (recipeCount)
         {
             Recipe *recipe = get_recipe(calculator, input->name);
-            
+
             f32 expectedInput = input->itemsPerMinute * ratio;
             if (printOverproduce)
             {
                 Item *producedAlready = get_produce_item(cost, input->name);
                 Item *consumedAlready = get_consume_item(cost, input->name);
-                
+
                 f32 consumedItems = 0.0f;
                 if (consumedAlready)
                 {
                     consumedItems = consumedAlready->itemsPerMinute;
                 }
-                
+
                 f32 extraPerMinute = 0.0f;
                 if (producedAlready)
                 {
@@ -520,7 +545,7 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
                     i_expect(consumedItems >= producedAlready->itemsPerMinute);
                     extraPerMinute = expectedInput + producedAlready->itemsPerMinute - consumedItems;
                 }
-                
+
                 if (extraPerMinute >= expectedInput)
                 {
                     if (!consumedAlready)
@@ -530,7 +555,7 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
                         consumedAlready->name = input->name;
                         consumedAlready->itemsPerMinute = 0;
                     }
-                    
+
                     consumedAlready->itemsPerMinute += expectedInput;
                     expectedInput = 0;
                 }
@@ -548,12 +573,12 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
                     expectedInput = expectedInput - extraPerMinute;
                 }
             }
-            
+
             if (expectedInput > 0.0f)
             {
-                print_recipe(calculator, output, cost, recipe, expectedInput, printAltenrates, printOverproduce);
-                
-                if ((recipeCount > 1) && printAltenrates) {
+                print_recipe(calculator, output, cost, recipe, expectedInput, printAlternates, printOverproduce);
+
+                if ((recipeCount > 1) && printAlternates) {
                     print_line(output, "alternates:");
                     CostTest fakeCost = {};
                     ++output.indent;
@@ -561,7 +586,7 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
                     {
                         Recipe *recipe = get_recipe(calculator, input->name, skip);
                         i_expect(recipe);
-                        print_recipe(calculator, output, &fakeCost, recipe, input->itemsPerMinute * ratio, printAltenrates, printOverproduce);
+                        print_recipe(calculator, output, &fakeCost, recipe, input->itemsPerMinute * ratio, false, printOverproduce);
                     }
                     --output.indent;
                 }
@@ -577,7 +602,7 @@ print_recipe(Calculator *calculator, FileStream output, CostTest *cost, Recipe *
         }
     }
     --output.indent;
-    
+
     //fprintf(stdout, "=====================================================\n");
 }
 
@@ -587,13 +612,13 @@ print_dot_recipe(Calculator *calculator, FileStream output, Recipe *recipe, f32 
 {
     u8 tempBuffer[256];
     u8 recordBuffer[1024];
-    
+
     f32 ratio = expectedPerMinute / recipe->output.itemsPerMinute;
-    
+
     String result = {0, nameData};
     String snakeName = to_snake(recipe->output.name, array_count(tempBuffer), tempBuffer);
     result = string_fmt(maxNameCount, nameData, "%.*s%d", STR_FMT(snakeName), (*index)++);
-    
+
     String record = string_fmt(array_count(recordBuffer), recordBuffer, "%.*s [shape=record, label=\"{", STR_FMT(result));
     for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
     {
@@ -602,17 +627,17 @@ print_dot_recipe(Calculator *calculator, FileStream output, Recipe *recipe, f32 
         record = append_string_fmt(record, array_count(recordBuffer), "%s<%.*s>%.*s", inputIdx == 0 ? "{" : "|", STR_FMT(snakeName), STR_FMT(input->name));
     }
     snakeName = to_snake(recipe->output.name, array_count(tempBuffer), tempBuffer); // TODO(michiel): I know...
-    record = append_string_fmt(record, array_count(recordBuffer), "}|%3.1f|{<%.*s>%.*s", STR_FMT(snakeName), ratio, STR_FMT(recipe->output.name));
+    record = append_string_fmt(record, array_count(recordBuffer), "}|%3.1f|{<%.*s>%.*s", ratio, STR_FMT(snakeName), STR_FMT(recipe->output.name));
     if (recipe->extraOutput.name.size)
     {
         snakeName = to_snake(recipe->extraOutput.name, array_count(tempBuffer), tempBuffer);
         record = append_string_fmt(record, array_count(recordBuffer), "|<%.*s>%.*s", STR_FMT(snakeName), STR_FMT(recipe->extraOutput.name));
     }
     record = append_string(record, string("}}\"];"), array_count(recordBuffer));
-    
+
     print_line(output, "%.*s", STR_FMT(record));
-    
-    
+
+
     u8 inputBuffer[256];
     for (u32 inputIdx = 0; inputIdx < recipe->inputCount; ++inputIdx)
     {
@@ -622,15 +647,15 @@ print_dot_recipe(Calculator *calculator, FileStream output, Recipe *recipe, f32 
         {
             Recipe *inputRecipe = get_recipe(calculator, input->name);
             i_expect(inputRecipe);
-            
+
             f32 expectedInput = input->itemsPerMinute * ratio;
             String inputString = print_dot_recipe(calculator, output, inputRecipe, expectedInput, array_count(inputBuffer), inputBuffer, index);
-            
+
             snakeName = to_snake(input->name, array_count(tempBuffer), tempBuffer);
             print_line(output, "%.*s:%.*s -> %.*s:%.*s", STR_FMT(inputString), STR_FMT(snakeName), STR_FMT(result), STR_FMT(snakeName));
         }
     }
-    
+
     return result;
 }
 
@@ -643,10 +668,10 @@ print_dotfile(Calculator *calculator, FileStream output, Recipe *recipe, f32 exp
     ++output.indent;
     print_line(output, "rankdir=LR;");
     print_line(output, "ranksep=\"1\";\n");
-    
+
     u32 index = 0;
     print_dot_recipe(calculator, output, recipe, expectedPerMinute, array_count(tempBuffer), tempBuffer, &index);
-    
+
     --output.indent;
     print_line(output, "}");
 }
@@ -654,23 +679,21 @@ print_dotfile(Calculator *calculator, FileStream output, Recipe *recipe, f32 exp
 int main(int argc, char **argv)
 {
     Calculator calculator = {};
-    
+
     calculator.maxRecipeCount = 1024;
     calculator.recipes = (Recipe *)malloc(sizeof(Recipe) * calculator.maxRecipeCount);
     //add_item(&calculator, static_string("unknown"));
-    
+
     add_recipe(&calculator, Smelter, static_string("iron ingot"), 30.0f, static_string("iron ore"), 30.0f);
     add_recipe(&calculator, Smelter, static_string("copper ingot"), 30.0f, static_string("copper ore"), 30.0f);
     add_recipe(&calculator, Foundry, static_string("steel ingot"), 45.0f, static_string("iron ore"), 45.0f, static_string("coal"), 45.0f);
-    add_recipe(&calculator, Foundry, static_string("steel ingot"), 60.0f, static_string("iron ingot"), 40.0f, static_string("coal"), 40.0f);
     add_recipe(&calculator, Smelter, static_string("caterium ingot"), 15.0f, static_string("caterium ore"), 45.0f);
-    
+    add_recipe(&calculator, Foundry, static_string("aluminium ingot"), 60.0f, static_string("aluminium scrap"), 90.0f, static_string("silica"), 75.0f);
+
     add_recipe(&calculator, Constructor, static_string("concrete"), 15.0f, static_string("limestone"), 45.0f);
     add_recipe(&calculator, Constructor, static_string("iron plate"), 20.0f, static_string("iron ingot"), 30.0f);
     add_recipe(&calculator, Constructor, static_string("iron rod"), 15.0f, static_string("iron ingot"), 15.0f);
     add_recipe(&calculator, Constructor, static_string("screw"), 40.0f, static_string("iron rod"), 10.0f);
-    add_recipe(&calculator, Constructor, static_string("screw"), 50.0f, static_string("iron ingot"), 12.5f);
-    add_recipe(&calculator, Constructor, static_string("screw"), 260.0f, static_string("steel beam"), 5.0f);
     add_recipe(&calculator, Constructor, static_string("wire"), 30.0f, static_string("copper ingot"), 15.0f);
     add_recipe(&calculator, Constructor, static_string("copper sheet"), 10.0f, static_string("copper ingot"), 20.0f);
     add_recipe(&calculator, Constructor, static_string("cable"), 30.0f, static_string("wire"), 60.0f);
@@ -680,56 +703,107 @@ int main(int argc, char **argv)
     add_recipe(&calculator, Constructor, static_string("quartz crystal"), 22.5f, static_string("raw quartz"), 37.5f);
     add_recipe(&calculator, Constructor, static_string("silica"), 37.5f, static_string("raw quartz"), 22.5f);
     add_recipe(&calculator, Constructor, static_string("empty canister"), 60.0f, static_string("plastic"), 30.0f);
-    
+    add_recipe(&calculator, Constructor, static_string("aluminium casing"), 60.0f, static_string("aluminium ingot"), 90.0f);
+
     add_recipe(&calculator, Assembler, static_string("rotor"), 4.0f, static_string("iron rod"), 20.0f, static_string("screw"), 100.0f);
     add_recipe(&calculator, Assembler, static_string("stator"), 5.0f, static_string("steel pipe"), 15.0f, static_string("wire"), 40.0f);
     add_recipe(&calculator, Assembler, static_string("motor"), 5.0f, static_string("rotor"), 10.0f, static_string("stator"), 10.0f);
     add_recipe(&calculator, Assembler, static_string("modular frame"), 2.0f, static_string("reinforced iron plate"), 3.0f, static_string("iron rod"), 12.0f);
     add_recipe(&calculator, Assembler, static_string("reinforced iron plate"), 5.0f, static_string("iron plate"), 30.0f, static_string("screw"), 60.0f);
     add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 6.0f, static_string("steel beam"), 24.0f, static_string("concrete"), 30.0f);
-    add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 4.0f, static_string("steel pipe"), 28.0f, static_string("concrete"), 20.0f);
     add_recipe(&calculator, Assembler, static_string("ai limiter"), 5.0f, static_string("copper sheet"), 25.0f, static_string("quickwire"), 100.0f);
     add_recipe(&calculator, Assembler, static_string("circuit board"), 7.5f, static_string("copper sheet"), 15.0f, static_string("plastic"), 30.0f);
     add_recipe(&calculator, Assembler, static_string("fabric"), 15.0f, static_string("mycelia"), 15.0f, static_string("biomass"), 75.0f);
-    
+    add_recipe(&calculator, Assembler, static_string("alclad aluminium sheet"), 30.0f, static_string("aluminium ingot"), 60.0f, static_string("copper ingot"), 22.5f);
+    add_recipe(&calculator, Assembler, static_string("heat sink"), 10.0f, static_string("alclad aluminium sheet"), 40.0f, static_string("rubber"), 70.0f);
+
     add_recipe(&calculator, Manufacturer, static_string("beacon"), 7.5f, static_string("iron plate"), 22.5f, static_string("iron rod"), 7.5f, static_string("wire"), 112.5f, static_string("cable"), 15.0f);
     add_recipe(&calculator, Manufacturer, static_string("crystal oscillator"), 1.0f, static_string("quartz crystal"), 18.0f, static_string("cable"), 14.0f, static_string("reinforced iron plate"), 2.5f);
     add_recipe(&calculator, Manufacturer, static_string("heavy modular frame"), 2.0f, static_string("modular frame"), 10.0f, static_string("steel pipe"), 30.0f, static_string("encased industrial beam"), 10.0f, static_string("screw"), 200.0f);
     add_recipe(&calculator, Manufacturer, static_string("computer"), 2.5f, static_string("circuit board"), 25.0f, static_string("cable"), 22.5f, static_string("plastic"), 45.0f, static_string("screw"), 130.0f);
     add_recipe(&calculator, Manufacturer, static_string("high-speed connector"), 3.8f, static_string("quickwire"), 210.0f, static_string("cable"), 37.5f, static_string("circuit board"), 3.75f);
     add_recipe(&calculator, Manufacturer, static_string("supercomputer"), 1.875f, static_string("computer"), 3.75f, static_string("ai limiter"), 3.75f, static_string("high-speed connector"), 5.625f, static_string("plastic"), 52.5f);
-    
+    add_recipe(&calculator, Manufacturer, static_string("battery"), 5.625f, static_string("alclad aluminium sheet"), 15.0f, static_string("wire"), 30.0f, static_string("sulfur"), 37.5f, static_string("plastic"), 15.0f);
+    add_recipe(&calculator, Manufacturer, static_string("radio control unit"), 2.5f, static_string("aluminium casing"), 40.0f, static_string("crystal oscillator"), 1.25f, static_string("computer"), 1.25f);
+    add_recipe(&calculator, Manufacturer, static_string("turbo motor"), 1.875f, static_string("heat sink"), 7.5f, static_string("radio control unit"), 3.75f, static_string("motor"), 7.5f, static_string("rubber"), 45.0f);
+
     add_recipe(&calculator, Assembler, static_string("compacted coal"), 25.0f, static_string("coal"), 25.0f, static_string("sulfur"), 25.0f);
     add_recipe(&calculator, Assembler, static_string("black powder"), 7.5f, static_string("coal"), 7.5f, static_string("sulfur"), 15.0f);
-    add_recipe(&calculator, Assembler, static_string("black powder"), 15.0f, static_string("compacted coal"), 3.75f, static_string("sulfur"), 7.5f);
     add_recipe(&calculator, Assembler, static_string("nobelisk"), 3.0f, static_string("black powder"), 15.0f, static_string("steel pipe"), 30.0f);
     add_recipe(&calculator, Manufacturer, static_string("gas filter"), 7.5f, static_string("coal"), 5.0f, static_string("rubber"), 15.0f, static_string("fabric"), 15.0f);
     add_recipe(&calculator, Manufacturer, static_string("rifle cartridge"), 15.0f, static_string("beacon"), 3.0f, static_string("steel pipe"), 30.0f, static_string("black powder"), 30.0f, static_string("rubber"), 30.0f);
-    
+
     Recipe *plastic = add_recipe(&calculator, Refinery, static_string("plastic"), 20.0f, static_string("crude oil"), 30.0f);
-    plastic->extraOutput.name = add_item(&calculator, static_string("heavy oil residue"));
-    plastic->extraOutput.itemsPerMinute = 10.0f;
+    add_extra_item(&calculator, plastic, static_string("heavy oil residue"), 10.0f);
     add_recipe(&calculator, Refinery, static_string("plastic"), 20.0f, static_string("polymer resin"), 60.0f, static_string("water"), 20.0f);
-    
-    add_recipe(&calculator, Refinery, static_string("rubber"), 60.0f, static_string("plastic"), 30.0f, static_string("fuel"), 30.0f);
+
     Recipe *rubber = add_recipe(&calculator, Refinery, static_string("rubber"), 20.0f, static_string("crude oil"), 30.0f);
-    rubber->extraOutput.name = add_item(&calculator, static_string("heavy oil residue"));
-    rubber->extraOutput.itemsPerMinute = 20.0f;
+    add_extra_item(&calculator, rubber, static_string("heavy oil residue"), 20.0f);
     add_recipe(&calculator, Refinery, static_string("rubber"), 20.0f, static_string("polymer resin"), 40.0f, static_string("water"), 40.0f);
-    
-    add_recipe(&calculator, Refinery, static_string("fuel"), 40.0f, static_string("heavy oil residue"), 60.0f);
+
     Recipe *fuel = add_recipe(&calculator, Refinery, static_string("fuel"), 40.0f, static_string("crude oil"), 60.0f);
-    fuel->extraOutput.name = add_item(&calculator, static_string("polymer resin"));
-    fuel->extraOutput.itemsPerMinute = 30.0f;
-    
+    add_extra_item(&calculator, fuel, static_string("polymer resin"), 30.0f);
+    add_recipe(&calculator, Refinery, static_string("fuel"), 40.0f, static_string("heavy oil residue"), 60.0f);
+    add_recipe(&calculator, Refinery, static_string("turbofuel"), 18.75f, static_string("fuel"), 22.5f, static_string("compacted coal"), 15.0f);
+
+    add_recipe(&calculator, Refinery, static_string("petroleum coke"), 120.0f, static_string("heavy oil residue"), 40.0f);
+
+    Recipe *alumina = add_recipe(&calculator, Refinery, static_string("alumina solution"), 120.0f, static_string("bauxite"), 120.0f, static_string("water"), 180.0f);
+    add_extra_item(&calculator, alumina, static_string("silica"), 50.0f);
+
+    Recipe *aluScrap = add_recipe(&calculator, Refinery, static_string("aluminium scrap"), 360.0f, static_string("alumina solution"), 240.0f, static_string("coal"), 120.0f);
+    add_extra_item(&calculator, aluScrap, static_string("water"), 120.0f);
+
+    add_recipe(&calculator, Refinery, static_string("sulfuric acid"), 100.0f, static_string("sulfur"), 50.0f, static_string("water"), 50.0f);
+    Recipe *uranPellet = add_recipe(&calculator, Refinery, static_string("uranium pellet"), 50.0f, static_string("uranium"), 50.0f, static_string("sulfuric acid"), 80.0f);
+    add_extra_item(&calculator, uranPellet, static_string("sulfuric acid"), 20.0f);
+
+    add_recipe(&calculator, Packager, static_string("packaged water"), 60.0f, static_string("water"), 60.0f, static_string("empty canister"), 60.0f);
+    add_recipe(&calculator, Packager, static_string("packaged oil"), 30.0f, static_string("crude oil"), 30.0f, static_string("empty canister"), 30.0f);
+    add_recipe(&calculator, Packager, static_string("packaged heavy oil residue"), 30.0f, static_string("heavy oil residue"), 30.0f, static_string("empty canister"), 30.0f);
+    add_recipe(&calculator, Packager, static_string("packaged fuel"), 40.0f, static_string("fuel"), 40.0f, static_string("empty canister"), 40.0f);
+    add_recipe(&calculator, Packager, static_string("packaged turbofuel"), 20.0f, static_string("turbofuel"), 20.0f, static_string("empty canister"), 20.0f);
+    add_recipe(&calculator, Packager, static_string("packaged alumina solution"), 120.0f, static_string("alumina solution"), 120.0f, static_string("empty canister"), 120.0f);
+
+    add_recipe(&calculator, Assembler, static_string("encased uranium cell"), 10.0f, static_string("uranium pellet"), 40.0f, static_string("concrete"), 9.0f);
+    add_recipe(&calculator, Assembler, static_string("electromagnetic control rod"), 4.0f, static_string("stator"), 6.0f, static_string("ai limiter"), 4.0f);
+    add_recipe(&calculator, Manufacturer, static_string("nuclear fuel rod"), 0.4f, static_string("encased uranium cell"), 10.0f, static_string("encased industrial beam"), 1.2f, static_string("electromagnetic control rod"), 2.0f);
+
     add_recipe(&calculator, Assembler, static_string("automated wiring"), 2.5f, static_string("stator"), 2.5f, static_string("cable"), 50.0f);
     add_recipe(&calculator, Assembler, static_string("smart plating"), 2.0f, static_string("reinforced iron plate"), 2.0f, static_string("rotor"), 2.0f);
     add_recipe(&calculator, Assembler, static_string("versatile framework"), 5.0f, static_string("modular frame"), 2.5f, static_string("steel beam"), 30.0f);
     add_recipe(&calculator, Manufacturer, static_string("modular engine"), 1.0f, static_string("motor"), 2.0f, static_string("rubber"), 15.0f, static_string("smart plating"), 2.0f);
     add_recipe(&calculator, Manufacturer, static_string("adaptive control unit"), 1.0f, static_string("automated wiring"), 7.5f, static_string("circuit board"), 5.0f, static_string("heavy modular frame"), 1.0f, static_string("computer"), 1.0f);
-    
+
+    // NOTE(michiel): Alternates
+
+    add_recipe(&calculator, Foundry, static_string("copper ingot"), 100.0f, static_string("copper ore"), 50.0f, static_string("iron ore"), 25.0f);
+    add_recipe(&calculator, Foundry, static_string("steel ingot"), 60.0f, static_string("iron ingot"), 40.0f, static_string("coal"), 40.0f);
+    add_recipe(&calculator, Constructor, static_string("screw"), 50.0f, static_string("iron ingot"), 12.5f);
+    add_recipe(&calculator, Constructor, static_string("screw"), 260.0f, static_string("steel beam"), 5.0f);
+    add_recipe(&calculator, Constructor, static_string("wire"), 22.5f, static_string("iron ingot"), 12.5f);
+    add_recipe(&calculator, Assembler, static_string("quickwire"), 90.0f, static_string("caterium ingot"), 7.5f, static_string("copper ingot"), 37.5f);
+    add_recipe(&calculator, Assembler, static_string("circuit board"), 5.0f, static_string("rubber"), 30.0f, static_string("petroleum coke"), 45.0f);
+    add_recipe(&calculator, Assembler, static_string("encased industrial beam"), 4.0f, static_string("steel pipe"), 28.0f, static_string("concrete"), 20.0f);
+    add_recipe(&calculator, Assembler, static_string("computer"), 2.8125f, static_string("circuit board"), 7.5f, static_string("crystal oscillator"), 2.8125f);
+    add_recipe(&calculator, Assembler, static_string("empty canister"), 60.0f, static_string("iron plate"), 30.0f, static_string("copper sheet"), 15.0f);
+    add_recipe(&calculator, Assembler, static_string("reinforced iron plate"), 15.0f, static_string("iron plate"), 90.0f, static_string("screw"), 250.0f);
+    add_recipe(&calculator, Assembler, static_string("reinforced iron plate"), 5.625f, static_string("iron plate"), 18.75f, static_string("wire"), 37.5f);
+    add_recipe(&calculator, Assembler, static_string("black powder"), 15.0f, static_string("compacted coal"), 3.75f, static_string("sulfur"), 7.5f);
+    add_recipe(&calculator, Manufacturer, static_string("computer"), 3.75f, static_string("circuit board"), 26.25f, static_string("quickwire"), 105.0f, static_string("rubber"), 45.0f);
+    add_recipe(&calculator, Manufacturer, static_string("crystal oscillator"), 1.875f, static_string("quartz crystal"), 18.75f, static_string("rubber"), 13.125f, static_string("ai limiter"), 1.875f);
+    add_recipe(&calculator, Manufacturer, static_string("heavy modular frame"), 2.8125f, static_string("modular frame"), 7.5f, static_string("encased industrial beam"), 9.375f, static_string("steel pipe"), 33.75f, static_string("concrete"), 20.625f);
+    add_recipe(&calculator, Refinery, static_string("plastic"), 60.0f, static_string("rubber"), 30.0f, static_string("fuel"), 30.0f);
+    add_recipe(&calculator, Refinery, static_string("rubber"), 60.0f, static_string("plastic"), 30.0f, static_string("fuel"), 30.0f);
+    Recipe *heavyResidue = add_recipe(&calculator, Refinery, static_string("heavy oil residue"), 40.0f, static_string("crude oil"), 30.0f);
+    add_extra_item(&calculator, heavyResidue, static_string("polymer resin"), 20.0f);
+    add_recipe(&calculator, Refinery, static_string("packaged fuel"), 60.0f, static_string("heavy oil residue"), 30.0f, static_string("packaged water"), 60.0f);
+    add_recipe(&calculator, Refinery, static_string("quartz crystal"), 52.5f, static_string("raw quartz"), 67.5f, static_string("water"), 37.5f);
+    add_recipe(&calculator, Refinery, static_string("copper sheet"), 22.5f, static_string("copper ingot"), 22.5f, static_string("water"), 22.5f);
+
+
     CostTest *cost = allocate_struct(CostTest);
-    
+
     b32 printAlternates = false;
     b32 printResources = false;
     b32 printOverproduce = false;
@@ -737,7 +811,7 @@ int main(int argc, char **argv)
     b32 printDot = false;
     String recipeName = {};
     f32 expectedAmount = 0.0f;
-    
+
     u32 togo = argc - 1;
     if (togo)
     {
@@ -764,37 +838,49 @@ int main(int argc, char **argv)
             --togo;
             ++arguments;
         }
-        
+
         Recipe *recipe = get_recipe(&calculator, recipeName);
         if (recipe)
         {
-            if (expectedAmount == 0.0f) {
-                expectedAmount = recipe->output.itemsPerMinute;
+            f32 expectedCalc = expectedAmount;
+            if (expectedCalc == 0.0f) {
+                expectedCalc = recipe->output.itemsPerMinute;
             }
             FileStream outputStream = {};
             outputStream.file.platform = stdout;
             outputStream.file.noErrors = 1;
             outputStream.file.filename = static_string("stdout");
-            
+
             if (printDot)
             {
-                print_dotfile(&calculator, outputStream, recipe, expectedAmount);
+                print_dotfile(&calculator, outputStream, recipe, expectedCalc);
             }
             else if (printTotal)
             {
-                calc_total_production(&calculator, cost, recipe, expectedAmount);
+                calc_total_production(&calculator, cost, recipe, expectedCalc);
                 print_total_production(&calculator, outputStream, cost);
             }
             else
             {
-                print_recipe(&calculator, outputStream, cost, recipe, expectedAmount, printAlternates, printOverproduce);
-                fprintf(stdout, "\n");
-                if (printResources) {
-                    print_cost(cost);
+                u32 recipeCount = get_recipe_count(&calculator, recipeName);
+                for (u32 index = 0; index < recipeCount; ++index) {
+                    recipe = get_recipe(&calculator, recipeName, index);
+                    if (index > 0) {
+                        fprintf(stdout, "\n\nALTERNATE:\n");
+                    }
+                    if (expectedAmount == 0.0f) {
+                        expectedCalc = recipe->output.itemsPerMinute;
+                    }
+                    print_recipe(&calculator, outputStream, cost, recipe, expectedCalc, printAlternates, printOverproduce);
                     fprintf(stdout, "\n");
+                    if (printResources) {
+                        print_cost(cost);
+                        fprintf(stdout, "\n");
+                    }
+                    output_input_cost(cost);
+                    print_cost(cost);
+                    *cost = {};
                 }
-                output_input_cost(cost);
-                print_cost(cost);
             }
         }
         else
@@ -802,7 +888,7 @@ int main(int argc, char **argv)
             // NOTE(NAME): Very crude string comparator to help spelling mistakes
             u32 bestMatchCount = 0;
             String bestMatch = {};
-            
+
             for (u32 recipeIdx = 0; recipeIdx < calculator.recipeCount; ++recipeIdx)
             {
                 Recipe *recipe = calculator.recipes + recipeIdx;
@@ -836,6 +922,6 @@ int main(int argc, char **argv)
     {
         fprintf(stderr, "Usage: %s <recipe name> [items per minute]\n", argv[0]);
     }
-    
+
     return 0;
 }
